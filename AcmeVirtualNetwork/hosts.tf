@@ -88,7 +88,7 @@ resource "azurerm_windows_virtual_machine" "dbserver1" {
     storage_account_type = "Standard_LRS"
   }
 
-  # az vm image list --location westeurope  --publisher MicrosoftSQLServer  --all --output table
+  # az vm image list --location westeurope --publisher MicrosoftSQLServer --all --output table
   source_image_reference {
     publisher = "MicrosoftSQLServer"
     offer     = "sql2019-ws2022"

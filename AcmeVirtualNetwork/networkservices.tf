@@ -24,6 +24,18 @@ resource "azurerm_network_security_group" "frontend-nsg" {
   location            = azurerm_resource_group.resource-group.location
   resource_group_name = azurerm_resource_group.resource-group.name
 
+  security_rule {
+    name                       = "AllowBastionHostInbound"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_ranges    = ["22", "3389"]
+    source_address_prefix      = azurerm_subnet.bastion-subnet.address_prefixes[0]
+    destination_address_prefix = "*"
+  }
+
   tags = {
     environment = var.environment_name
   }
@@ -39,6 +51,18 @@ resource "azurerm_network_security_group" "data-nsg" {
   location            = azurerm_resource_group.resource-group.location
   resource_group_name = azurerm_resource_group.resource-group.name
 
+  security_rule {
+    name                       = "AllowBastionHostInbound"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_ranges    = ["22", "3389"]
+    source_address_prefix      = azurerm_subnet.bastion-subnet.address_prefixes[0]
+    destination_address_prefix = "*"
+  }
+
   tags = {
     environment = var.environment_name
   }
@@ -47,6 +71,117 @@ resource "azurerm_network_security_group" "data-nsg" {
 resource "azurerm_subnet_network_security_group_association" "data-nsg-to-subnet" {
   subnet_id                 = azurerm_subnet.data-subnet.id
   network_security_group_id = azurerm_network_security_group.data-nsg.id
+}
+
+resource "azurerm_network_security_group" "bastion-nsg" {
+  name                = "${var.region_short}-${var.project_name}-${var.environment_name}-bastion-nsg"
+  location            = azurerm_resource_group.resource-group.location
+  resource_group_name = azurerm_resource_group.resource-group.name
+
+  security_rule {
+    name                       = "AllowHttpsInbound"
+    priority                   = 120
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "443"
+    source_address_prefix      = "Internet"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "AllowGatewayManagerInbound"
+    priority                   = 130
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "443"
+    source_address_prefix      = "GatewayManager"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "AllowAzureLoadBalancerInbound"
+    priority                   = 140
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "443"
+    source_address_prefix      = "AzureLoadBalancer"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "AllowBastionHostCommunicationInbound"
+    priority                   = 150
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_ranges    = ["8080", "5701"]
+    source_address_prefix      = "VirtualNetwork"
+    destination_address_prefix = "VirtualNetwork"
+  }
+
+  security_rule {
+    name                       = "AllowSshRdpOutbound"
+    priority                   = 100
+    direction                  = "Outbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_ranges    = ["3389", "22"]
+    source_address_prefix      = "*"
+    destination_address_prefix = "VirtualNetwork"
+  }
+
+  security_rule {
+    name                       = "AllowAzureCloudOutbound"
+    priority                   = 110
+    direction                  = "Outbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "443"
+    source_address_prefix      = "*"
+    destination_address_prefix = "AzureCloud"
+  }
+
+  security_rule {
+    name                       = "AllowBastionHostCommunicationOutbound"
+    priority                   = 120
+    direction                  = "Outbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_ranges    = ["8080", "5701"]
+    source_address_prefix      = "VirtualNetwork"
+    destination_address_prefix = "VirtualNetwork"
+  }
+
+  security_rule {
+    name                       = "AllowGetSessionInformation"
+    priority                   = 130
+    direction                  = "Outbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "80"
+    source_address_prefix      = "*"
+    destination_address_prefix = "Internet"
+  }
+
+  tags = {
+    environment = var.environment_name
+  }
+}
+
+resource "azurerm_subnet_network_security_group_association" "bastion-nsg-to-subnet" {
+  subnet_id                 = azurerm_subnet.bastion-subnet.id
+  network_security_group_id = azurerm_network_security_group.bastion-nsg.id
 }
 
 # *** BASTION ***
@@ -67,6 +202,7 @@ resource "azurerm_bastion_host" "bastion" {
   name                = "${var.region_short}-${var.project_name}-${var.environment_name}-bastion-bash"
   location            = azurerm_resource_group.resource-group.location
   resource_group_name = azurerm_resource_group.resource-group.name
+  sku                 = "Standard"
 
   ip_configuration {
     name                 = "ipconfig1"
@@ -174,7 +310,7 @@ resource "azurerm_firewall_nat_rule_collection" "frontend-inbound" {
 
     translated_port    = 3389
     translated_address = azurerm_network_interface.frontend1-nic.private_ip_address
-    
+
     protocols = ["TCP"]
   }
 
